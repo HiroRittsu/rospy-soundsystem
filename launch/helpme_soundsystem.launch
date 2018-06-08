@@ -1,0 +1,6 @@
+<launch>
+    <node pkg="soundsystem" name="julius" type="helpme_julius.py"/>
+    <node pkg="soundsystem" name="beep" type="beep.py"/>
+    <node pkg="soundsystem" name="main" type="soundmain.py"/>
+    <node pkg="soundsystem" name="speaker" type="speaker.py"/>
+</launch>
