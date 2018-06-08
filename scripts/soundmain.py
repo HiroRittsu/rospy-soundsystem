@@ -22,7 +22,7 @@ def boolean_send(flag, pub):
     pub.publish(send)
 
 
-def executing_start(member, monitor):
+def executing_start(member):
     global recognition_flag, beep_flag, speaker_flag, monitor_flag
     if member == 'beep':
         beep_flag = True
@@ -31,22 +31,8 @@ def executing_start(member, monitor):
     elif member == 'recognition':
         recognition_flag = True
 
-    if monitor:
-        monitor_flag = True
 
-
-def executing_state(status, member):
-    # 自分自身すでに実行されてる場合
-    if member == 'beep':
-        if beep_flag:
-            status = 'pass'
-    if member == 'speaker':
-        if speaker_flag:
-            status = 'pass'
-    if member == 'recognition':
-        if recognition_flag:
-            status = 'pass'
-
+def executing_state(status):
     if status == 'stay':
         while recognition_flag or beep_flag or speaker_flag:
             pass
@@ -58,22 +44,6 @@ def executing_state(status, member):
             return False
 
 
-def executing_wait(member):
-    global recognition_flag, beep_flag, speaker_flag
-    if member == 'recognition':
-        while recognition_flag:
-            pass
-        recognition_flag = False
-    elif member == 'beep':
-        while beep_flag:
-            pass
-        beep_flag = False
-    elif member == 'speaker':
-        while speaker_flag:
-            pass
-        speaker_flag = False
-
-
 def executing_stop(member):
     global recognition_flag, beep_flag, speaker_flag, monitor_flag
     if member == 'beep':
@@ -83,69 +53,65 @@ def executing_stop(member):
     elif member == 'recognition':
         recognition_flag = False
 
-    if monitor_flag:
-        string_send(member, main_finish_flag)
-        print "モニター", member
-        monitor_flag = False
-
 ##############################################################################
+# 処理部分
 
 
 def recognition(send):
-    global recognition_flag, beep_flag
     if send == 'start':
-        if executing_state('stay', 'recognition'):
-            beep('RecognitionStart')  # beep
-            executing_wait('beep')  # 待機
-            print "start:" ,monitor_flag
-            executing_start('recognition', True)
-            boolean_send(True, main_recognition_control)  # 認識開始
-            print '認識開始'
-
-    elif send == 'stop':
-        boolean_send(False, main_recognition_control)  # 認識終了
-        beep('RecognitionStop')  # beep
-        executing_wait('beep')  # 待機
-        executing_stop('recognition')
-        print '認識終了'
-
+        boolean_send(True, main_recognition_control)  # 認識開始
+        print '認識開始'
     else:
-        boolean_send(False, main_recognition_control)  # 認識終了
-        beep('RecognitionError')  # beep
-        executing_wait('beep')  # 待機
-        executing_stop('recognition')
-        print '認識エラー'
+        boolean_send(False, main_recognition_control)  # 認識開始
 
 
 def beep(sned):
     string_send(sned, main_beep_message)  # beep音
     print "beep音開始: " + sned
+    executing_state('stay')  # 待機
 
 
 def speak(send):
     string_send(send, main_speaker_message)  # 発音文
     print "発音開始: " + send
+    executing_state('stay')  # 待機
 
 ######################################################################################
+# メッセージ送受信部分 -必ずひとつだけ実行
 
 
-def recognition_control(message):  # 音声認識
-    if message.data == 'start':
-        recognition(message.data)
-    elif message.data == 'stop' or message.data == 'error':
-        recognition(message.data)
+def recognitionSTART(message):
+    beep('RecognitionStart')  # 実行からシグナル受け取りまで
+    executing_start('recognition')
+    recognition('start')  # 実行
+
+
+def recognitionSTOP(message):
+    recognition('stop')
+    executing_stop('recognition')
+    executing_start('beep')
+    if message.data == 'stop':
+        beep('RecognitionStop')
+        print '認識終了'
+    else:
+        beep('RecognitionError')
+        print '認識エラー'
+    send_singnal('recognition')  # 終了シグナル送信
 
 
 def beep_message(message):  # beep音
-    if executing_state('pass', 'none'):  # 状況確認
-        executing_start('beep', True)  # 実行開始
-        beep(message.data)
+    if executing_state('pass'):  # 状況確認
+        executing_start('beep')
+        beep(message.data)  # 実行からシグナル受け取りまで
+        send_singnal('beep')  # 終了シグナル送信
 
 
 def speaker_message(message):  # 発音
-    if executing_state('stay', 'none'):  # 状況確認
-        executing_start('speaker', True)  # 実行開始
-        speak(message.data)
+    executing_state('stay')  # 状況確認
+    executing_start('speaker')
+    speak(message.data)  # 実行からシグナル受け取りまで
+    send_singnal('speaker')  # 終了シグナル送信
+    executing_state('stay')  # 待機
 
 
 def beep_signal(message):
@@ -157,7 +123,12 @@ def speaker_signal(message):
     executing_stop('speaker')
     print "発音終了: ", message.data
 
+
+def send_singnal(send):
+    string_send(send, main_finish_flag)
+
 ################################################################################################
+# メイン
 
 
 if __name__ == '__main__':
@@ -173,8 +144,8 @@ if __name__ == '__main__':
                 'main_beep_message', String, queue_size=10)
             main_finish_flag = rospy.Publisher('finish', String, queue_size=10)
 
-            rospy.Subscriber('recognition_start', String, recognition_control)
-            rospy.Subscriber('recognition_stop', String, recognition_control)
+            rospy.Subscriber('recognition_start', String, recognitionSTART)
+            rospy.Subscriber('recognition_stop', String, recognitionSTOP)
             rospy.Subscriber('speaker', String, speaker_message)
             rospy.Subscriber('beep', String, beep_message)
             rospy.Subscriber('speaker_signal', Bool, speaker_signal)
