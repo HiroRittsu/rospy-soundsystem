@@ -5,6 +5,7 @@ import rospy
 from std_msgs.msg import Bool, String
 
 recognition_flag = False
+recognition_subflag = False
 beep_flag = False
 speaker_flag = False
 monitor_flag = False
@@ -81,12 +82,16 @@ def speak(send):
 
 
 def recognitionSTART(message):
-    beep('RecognitionStart')  # 実行からシグナル受け取りまで
-    executing_start('recognition')
-    recognition('start')  # 実行
+    global recognition_subflag
+    if not recognition_subflag:
+        recognition_subflag = True
+        beep('RecognitionStart')  # 実行からシグナル受け取りまで
+        executing_start('recognition')
+        recognition('start')  # 実行
 
 
 def recognitionSTOP(message):
+    global recognition_subflag
     recognition('stop')
     executing_stop('recognition')
     executing_start('beep')
@@ -96,6 +101,7 @@ def recognitionSTOP(message):
     else:
         beep('RecognitionError')
         print '認識エラー'
+    recognition_subflag = False
     send_singnal('recognition')  # 終了シグナル送信
 
 
